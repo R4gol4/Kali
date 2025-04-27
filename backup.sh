@@ -52,7 +52,7 @@ else
     echo "Backing up $DEVICE to $FULL_PATH" >> $LOG_FILE
 
     # === ROOT PARTITION DETECTION ===
-    if
+    if [ "$RESUME_AFTER_REBOOT" = false ]; then
         if grep -q "$DEVICE /" /proc/mounts; then
             echo "Root partition detected. Scheduling filesystem check at next reboot..." | tee -a $LOG_FILE
             touch /forcefsck
