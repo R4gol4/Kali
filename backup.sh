@@ -45,10 +45,11 @@ else
         touch /forcefsck
         touch $REBOOT_MARKER
         echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
+        sleep 5  # Optional: Give the user a moment to cancel the reboot if needed
         reboot
         exit 0
     fi
-
+    
     # === FILESYSTEM CHECK (for non-root partitions) ===
     echo "Starting filesystem check on $DEVICE..."
     umount $DEVICE 2>> $LOG_FILE
@@ -56,7 +57,6 @@ else
         echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
         exit 1
     fi
-fi
 
 # === CHECK SYSTEM INTEGRITY ===
 echo "Filesystem OK. Running debsums..."
