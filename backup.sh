@@ -58,9 +58,13 @@ else
             touch /forcefsck
             touch $REBOOT_MARKER
             echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
-            sleep 5  # Optional: Give the user a moment to cancel the reboot if needed
-            reboot
-            exit 0
+            read -p "Do you want to Reboot y/n:        " user_input
+            if [[ "$user_input" == "" }}; then
+                reboot
+            else
+                echo "reboot cancelled"
+                exit 0
+            fi
         else
         # === FILESYSTEM CHECK (for non-root partitions) ===
             echo "Starting filesystem check on $DEVICE..."
