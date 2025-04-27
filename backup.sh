@@ -40,7 +40,7 @@ else
     echo "Backing up $DEVICE to $FULL_PATH" >> $LOG_FILE
 
     # === ROOT PARTITION DETECTION ===
-    if grep -q " / " /proc/mounts | grep -q "$DEVICE"; then
+    if grep -E -q "$DEVICE\s+/(\s|$)" /proc/mounts; then
         echo "Root partition detected. Scheduling filesystem check at next reboot..." | tee -a $LOG_FILE
         touch /forcefsck
         touch $REBOOT_MARKER
@@ -57,7 +57,7 @@ else
             exit 1
         fi
     fi
-    
+fi
 # === CHECK SYSTEM INTEGRITY ===
 echo "Filesystem OK. Running debsums..."
 if ! debsums -s >> $LOG_FILE 2>&1; then
