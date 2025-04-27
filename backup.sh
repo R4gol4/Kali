@@ -36,7 +36,7 @@ else
     fi
 
     # === INITIALIZE LOG FILE ===
-    echo "Backup started at $(date)" > $LOG_FILE
+    echo "Backup started at $(date)" >> $LOG_FILE
     echo "Backing up $DEVICE to $FULL_PATH" >> $LOG_FILE
 
     # === ROOT PARTITION DETECTION ===
