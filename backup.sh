@@ -9,6 +9,9 @@ LOG_FILE="./backup_error.log"
 MAX_BACKUPS=3
 REBOOT_MARKER="/tmp/backup_after_reboot"
 
+# === INITIALIZE LOG FILE ===
+echo "Backup process started at $(date)" > $LOG_FILE
+
 # === CHECK FOR ROOT PRIVILEGES ===
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script as root or with sudo." | tee -a $LOG_FILE
@@ -39,17 +42,17 @@ else
     # === ROOT PARTITION DETECTION ===
     if grep -q " / " /proc/mounts | grep -q "$DEVICE"; then
         echo "Root partition detected. Scheduling filesystem check at next reboot..." | tee -a $LOG_FILE
-        sudo touch /forcefsck
-        sudo touch $REBOOT_MARKER
+        touch /forcefsck
+        touch $REBOOT_MARKER
         echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
-        sudo reboot
+        reboot
         exit 0
     fi
 
     # === FILESYSTEM CHECK (for non-root partitions) ===
     echo "Starting filesystem check on $DEVICE..."
-    sudo umount $DEVICE 2>> $LOG_FILE
-    if ! sudo fsck -y $DEVICE >> $LOG_FILE 2>&1; then
+    umount $DEVICE 2>> $LOG_FILE
+    if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
         echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
         exit 1
     fi
@@ -57,7 +60,7 @@ fi
 
 # === CHECK SYSTEM INTEGRITY ===
 echo "Filesystem OK. Running debsums..."
-if ! sudo debsums -s >> $LOG_FILE 2>&1; then
+if ! debsums -s >> $LOG_FILE 2>&1; then
     echo "Debsums detected corrupted packages! Please fix before backup." | tee -a $LOG_FILE
     exit 1
 fi
@@ -71,7 +74,7 @@ fi
 
 # === BACKUP ===
 echo "Both checks passed. Starting full backup..."
-if ! sudo dd if=$DEVICE of=$FULL_PATH bs=64K conv=noerror,sync status=progress >> $LOG_FILE 2>&1; then
+if ! dd if=$DEVICE of=$FULL_PATH bs=64K conv=noerror,sync status=progress >> $LOG_FILE 2>&1; then
     echo "Backup failed during the dd operation!" | tee -a $LOG_FILE
     exit 1
 fi
