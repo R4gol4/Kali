@@ -51,7 +51,11 @@ else
     else
     # === FILESYSTEM CHECK (for non-root partitions) ===
         echo "Starting filesystem check on $DEVICE..."
-        umount $DEVICE 2>> $LOG_FILE
+        if ! umount $DEVICE 2>> $LOG_FILE; then
+            echo "Failed to unmount" | tee -a $LOG_FILE
+            exit 1
+        fi
+        
         if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
             echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
             exit 1
