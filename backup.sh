@@ -48,16 +48,16 @@ else
         sleep 5  # Optional: Give the user a moment to cancel the reboot if needed
         reboot
         exit 0
+    else
+    # === FILESYSTEM CHECK (for non-root partitions) ===
+        echo "Starting filesystem check on $DEVICE..."
+        umount $DEVICE 2>> $LOG_FILE
+        if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
+            echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
+            exit 1
+        fi
     fi
     
-    # === FILESYSTEM CHECK (for non-root partitions) ===
-    echo "Starting filesystem check on $DEVICE..."
-    umount $DEVICE 2>> $LOG_FILE
-    if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
-        echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
-        exit 1
-    fi
-
 # === CHECK SYSTEM INTEGRITY ===
 echo "Filesystem OK. Running debsums..."
 if ! debsums -s >> $LOG_FILE 2>&1; then
