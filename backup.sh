@@ -1,5 +1,17 @@
 #!/bin/bash
 
+REBOOT_MARKER="/var/run/backup_resume.marker"
+
+# Check if resuming after reboot
+if [ -f "$REBOOT_MARKER" ]; then
+    echo "$(date) - Resuming backup after reboot..." | tee -a "$LOG_FILE"
+    rm -f "$REBOOT_MARKER"
+    RESUME_AFTER_REBOOT=true
+else
+    RESUME_AFTER_REBOOT=false
+fi
+
+
 # === CONFIGURATION ===
 DEVICE="/dev/nvme0n1p2"
 BACKUP_LOCATION="/mnt/external_hdd/backups"
@@ -40,25 +52,27 @@ else
     echo "Backing up $DEVICE to $FULL_PATH" >> $LOG_FILE
 
     # === ROOT PARTITION DETECTION ===
-    if grep -q "$DEVICE /" /proc/mounts; then
-        echo "Root partition detected. Scheduling filesystem check at next reboot..." | tee -a $LOG_FILE
-        touch /forcefsck
-        touch $REBOOT_MARKER
-        echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
-        sleep 5  # Optional: Give the user a moment to cancel the reboot if needed
-        reboot
-        exit 0
-    else
-    # === FILESYSTEM CHECK (for non-root partitions) ===
-        echo "Starting filesystem check on $DEVICE..."
-        if ! umount $DEVICE 2>> $LOG_FILE; then
-            echo "Failed to unmount" | tee -a $LOG_FILE
-            exit 1
-        fi
-        
-        if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
-            echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
-            exit 1
+    if
+        if grep -q "$DEVICE /" /proc/mounts; then
+            echo "Root partition detected. Scheduling filesystem check at next reboot..." | tee -a $LOG_FILE
+            touch /forcefsck
+            touch $REBOOT_MARKER
+            echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
+            sleep 5  # Optional: Give the user a moment to cancel the reboot if needed
+            reboot
+            exit 0
+        else
+        # === FILESYSTEM CHECK (for non-root partitions) ===
+            echo "Starting filesystem check on $DEVICE..."
+            if ! umount $DEVICE 2>> $LOG_FILE; then
+                echo "Failed to unmount" | tee -a $LOG_FILE
+                exit 1
+            fi
+            
+            if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
+                echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
+                exit 1
+            fi
         fi
     fi
 fi
