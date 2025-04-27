@@ -59,7 +59,7 @@ else
             touch $REBOOT_MARKER
             echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
             read -p "Do you want to Reboot y/n:        " user_input
-            if [[ "$user_input" == "" }}; then
+            if [[ "$user_input" == "y" ]]; then
                 reboot
             else
                 echo "reboot cancelled"
