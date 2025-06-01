@@ -1,105 +1,55 @@
 #!/bin/bash
 
-REBOOT_MARKER="/var/run/backup_resume.marker"
+# CONFIGURATION
+BACKUP_DIR="/mnt/external_hdd/backups"
+BACKUP_PREFIX="backup"
+TODAY=$(date +%F)
+BACKUP_NAME="${BACKUP_PREFIX}-${TODAY}.tar.gz"
+FULL_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
+SOURCE_DIR="/"
+EXCLUDES=(
+  --exclude=/proc
+  --exclude=/tmp
+  --exclude=/mnt
+  --exclude=/dev
+  --exclude=/sys
+  --exclude=/run
+  --exclude=/media
+  --exclude=/lost+found
+  --exclude=/swapfile
+)
 
-# Check if resuming after reboot
-if [ -f "$REBOOT_MARKER" ]; then
-    echo "$(date) - Resuming backup after reboot..." | tee -a "$LOG_FILE"
-    rm -f "$REBOOT_MARKER"
-    RESUME_AFTER_REBOOT=true
-else
-    RESUME_AFTER_REBOOT=false
+# 1. CHECK: Ensure backup directory is mounted and writable
+if [ ! -d "$BACKUP_DIR" ]; then
+  echo "ERROR: Backup directory $BACKUP_DIR does not exist or is not mounted."
+  exit 1
 fi
 
+if [ ! -w "$BACKUP_DIR" ]; then
+  echo "ERROR: Cannot write to $BACKUP_DIR."
+  exit 1
+fi
 
-# === CONFIGURATION ===
-DEVICE="/dev/nvme0n1p2"
-BACKUP_LOCATION="/mnt/external_hdd/backups"
-BACKUP_NAME="system_backup_$(date +%Y-%m-%d).img"
-FULL_PATH="$BACKUP_LOCATION/$BACKUP_NAME"
-LOG_FILE="./backup_error.log"
-MAX_BACKUPS=3
-REBOOT_MARKER="/tmp/backup_after_reboot"
-
-# === INITIALIZE LOG FILE ===
-echo "Backup process started at $(date)" > $LOG_FILE
-
-# === CHECK FOR ROOT PRIVILEGES ===
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run this script as root or with sudo." | tee -a $LOG_FILE
+# 2. CHECK: Source directories are readable
+echo "Checking source directories for readability..."
+for dir in /bin /boot /etc /home /lib /opt /root /sbin /srv /usr /var; do
+  if [ ! -r "$dir" ]; then
+    echo "ERROR: Cannot read $dir"
     exit 1
+  fi
+done
+
+# 3. DELETE: Remove oldest backup if more than 5 exist
+BACKUP_COUNT=$(ls -1 ${BACKUP_DIR}/${BACKUP_PREFIX}-*.tar.gz 2>/dev/null | wc -l)
+if [ "$BACKUP_COUNT" -ge 5 ]; then
+  OLDEST=$(ls -1 ${BACKUP_DIR}/${BACKUP_PREFIX}-*.tar.gz | head -n 1)
+  echo "Deleting oldest backup: $OLDEST"
+  rm "$OLDEST"
 fi
 
-# === CHECK IF POST-REBOOT ===
-if [ -f "$REBOOT_MARKER" ]; then
-    echo "System rebooted, filesystem check complete. Continuing with backup..." | tee -a $LOG_FILE
-    rm "$REBOOT_MARKER"   # Cleanup marker
-else
-    # === VALIDATE EXTERNAL HDD ===
-    if ! mountpoint -q /mnt/external_hdd; then
-        echo "External HDD is not connected or mounted. Please check and try again." | tee -a $LOG_FILE
-        exit 1
-    fi
+# 4. BACKUP: Create new compressed tarball
+echo "Creating backup: $FULL_PATH"
+sudo tar -czvf "$FULL_PATH" "${EXCLUDES[@]}" "$SOURCE_DIR"
 
-    # Ensure the backup directory exists
-    if [ ! -d "$BACKUP_LOCATION" ]; then
-        echo "Backup directory does not exist. Creating it now..." | tee -a $LOG_FILE
-        mkdir -p "$BACKUP_LOCATION"
-    fi
-
-    # === INITIALIZE LOG FILE ===
-    echo "Backup started at $(date)" >> $LOG_FILE
-    echo "Backing up $DEVICE to $FULL_PATH" >> $LOG_FILE
-
-    # === ROOT PARTITION DETECTION ===
-    if [ "$RESUME_AFTER_REBOOT" = false ]; then
-        if grep -q "$DEVICE /" /proc/mounts; then
-            echo "Root partition detected. Scheduling filesystem check at next reboot..." | tee -a $LOG_FILE
-            touch /forcefsck
-            touch $REBOOT_MARKER
-            echo "Rebooting now to run fsck..." | tee -a $LOG_FILE
-            read -p "Do you want to Reboot y/n:        " user_input
-            if [[ "$user_input" == "y" ]]; then
-                reboot
-            else
-                echo "reboot cancelled"
-                exit 0
-            fi
-        else
-        # === FILESYSTEM CHECK (for non-root partitions) ===
-            echo "Starting filesystem check on $DEVICE..."
-            if ! umount $DEVICE 2>> $LOG_FILE; then
-                echo "Failed to unmount" | tee -a $LOG_FILE
-                exit 1
-            fi
-            
-            if ! fsck -y $DEVICE >> $LOG_FILE 2>&1; then
-                echo "Filesystem check failed! Aborting backup." | tee -a $LOG_FILE
-                exit 1
-            fi
-        fi
-    fi
-fi
-# === CHECK SYSTEM INTEGRITY ===
-echo "Filesystem OK. Running debsums..."
-if ! debsums -s >> $LOG_FILE 2>&1; then
-    echo "Debsums detected corrupted packages! Please fix before backup." | tee -a $LOG_FILE
-    exit 1
-fi
-
-# === BACKUP ROTATION ===
-if [ "$(ls -1 $BACKUP_LOCATION | wc -l)" -ge "$MAX_BACKUPS" ]; then
-    OLDEST_BACKUP=$(ls -1t $BACKUP_LOCATION | tail -n 1)
-    echo "Deleting oldest backup: $OLDEST_BACKUP" | tee -a $LOG_FILE
-    rm "$BACKUP_LOCATION/$OLDEST_BACKUP"
-fi
-
-# === BACKUP ===
-echo "Both checks passed. Starting full backup..."
-if ! dd if=$DEVICE of=$FULL_PATH bs=64K conv=noerror,sync status=progress >> $LOG_FILE 2>&1; then
-    echo "Backup failed during the dd operation!" | tee -a $LOG_FILE
-    exit 1
-fi
-
-echo "Backup complete! Saved to $FULL_PATH" | tee -a $LOG_FILE
-echo "Backup finished at $(date)" >> $LOG_FILE
+# 5. DONE
+echo "Backup completed successfully at $FULL_PATH"
